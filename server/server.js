@@ -579,47 +579,50 @@ app.post('/api/ai/advisor', async (req, res) => {
       hinglish: 'You must respond in Hinglish (Roman script Hindi mixed with simple English) as spoken colloquially in rural India.',
     }[language] || 'Respond in friendly Hinglish.';
 
-    // 1. Try Official @google/genai SDK (gemini-2.5-flash)
+    // 1. Try Official @google/genai SDK (gemini-3.8-flash with fallback)
     if (genAIClient) {
-      try {
-        const contents = [];
-        if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
-          conversationHistory.slice(-4).forEach(msg => {
-            contents.push({
-              role: msg.role === 'user' ? 'user' : 'model',
-              parts: [{ text: String(msg.content) }],
+      const candidateModels = ['gemini-3.8-flash', 'gemini-2.5-flash'];
+      const contents = [];
+      if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+        conversationHistory.slice(-4).forEach(msg => {
+          contents.push({
+            role: msg.role === 'user' ? 'user' : 'model',
+            parts: [{ text: String(msg.content) }],
+          });
+        });
+      }
+      contents.push({
+        role: 'user',
+        parts: [{ text: message }],
+      });
+
+      for (const modelName of candidateModels) {
+        try {
+          const result = await genAIClient.models.generateContent({
+            model: modelName,
+            contents: contents,
+            config: {
+              systemInstruction: KRISHI_MITRA_SYSTEM_INSTRUCTION + `\n\nLanguage instruction: ${languageInstruction}`,
+            },
+          });
+
+          let responseText = result.text;
+          if (!responseText && result.candidates?.[0]?.content?.parts?.[0]?.text) {
+            responseText = result.candidates[0].content.parts[0].text;
+          }
+
+          if (responseText && responseText.trim()) {
+            return res.json({
+              success: true,
+              response: responseText.trim(),
+              language,
+              engine: modelName,
+              timestamp: new Date().toISOString(),
             });
-          });
+          }
+        } catch (modelErr) {
+          console.warn(`@google/genai call for ${modelName} failed:`, modelErr.message);
         }
-        contents.push({
-          role: 'user',
-          parts: [{ text: message }],
-        });
-
-        const result = await genAIClient.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: contents,
-          config: {
-            systemInstruction: KRISHI_MITRA_SYSTEM_INSTRUCTION + `\n\nLanguage instruction: ${languageInstruction}`,
-          },
-        });
-
-        let responseText = result.text;
-        if (!responseText && result.candidates?.[0]?.content?.parts?.[0]?.text) {
-          responseText = result.candidates[0].content.parts[0].text;
-        }
-
-        if (responseText && responseText.trim()) {
-          return res.json({
-            success: true,
-            response: responseText.trim(),
-            language,
-            engine: 'gemini-2.5-flash',
-            timestamp: new Date().toISOString(),
-          });
-        }
-      } catch (genAiErr) {
-        console.warn('Primary @google/genai call failed, trying backup:', genAiErr.message);
       }
     }
 
