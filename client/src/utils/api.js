@@ -7,7 +7,10 @@ const api = axios.create({
 });
 
 export const weatherAPI = {
-  get: (lat, lon, location) => api.get(`/weather?lat=${lat}&lon=${lon}&location=${encodeURIComponent(location)}`),
+  get: (lat, lon, location) =>
+    api.get(`/weather?lat=${lat}&lon=${lon}${location ? `&location=${encodeURIComponent(location)}` : ''}`),
+  reverseGeocode: (lat, lon) =>
+    api.get(`/weather/reverse-geocode?lat=${lat}&lon=${lon}`),
 };
 
 export const cropsAPI = {
@@ -28,6 +31,13 @@ export const schemesAPI = {
 
 export const soilAPI = {
   getMetrics: () => api.get('/soil/metrics'),
+};
+
+export const farmerAPI = {
+  save: (data) => api.post('/farmers', data),
+  getProfile: (phone) => api.get('/farmers/profile', { params: phone ? { phone } : {} }),
+  getById: (id) => api.get(`/farmers/${id}`),
+  getAdvisory: (data) => api.post('/farmers/advisory', data),
 };
 
 export const aiAPI = {
